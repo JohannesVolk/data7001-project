@@ -5,3 +5,4 @@ pandas
 opencv-python
 matplotlib
 gtfs-realtime-bindings
+rasterio

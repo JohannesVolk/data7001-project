@@ -60,8 +60,8 @@ app.layout = html.Div(
     ]
 )
 
-df_stops = pd.read_csv("stops.txt")
-df_routes = pd.read_csv("routes.txt")
+df_stops = pd.read_csv("data/stops.txt")
+df_routes = pd.read_csv("data/routes.txt")
 
 
 # Define callback to update graph
@@ -82,6 +82,8 @@ def streamFig(value, input, slider):
     if not LIVE:
         df_combine = csv_to_df(paths_translink[slider])
 
+
+    df_combine["rain_dbz"] = df_combine["rain_dbz"].astype(str)
     fig = go.Figure()
 
     if input != None:
@@ -99,7 +101,11 @@ def streamFig(value, input, slider):
             lat=df_selection["lat"],
             lon=df_selection["lon"],
             marker=dict(size=16),
-            text=df_selection["route_long_name"] + " to: " + df_selection["stop_name"],
+            text=df_selection["route_long_name"]
+            + " to: "
+            + df_selection["stop_name"]
+            + " rain: "
+            + df_selection["rain_dbz"],
         )
 
         # scatter upcoming stops for selected route
@@ -131,7 +137,9 @@ def streamFig(value, input, slider):
             + " | "
             + df_combine["route_long_name"]
             + " to: "
-            + df_combine["stop_name"],
+            + df_combine["stop_name"]
+            + " rain: "
+            + df_combine['rain_dbz'],
         )
         fig.update_mapboxes(
             center={"lat": df_combine["lat"].mean(), "lon": df_combine["lon"].mean()},

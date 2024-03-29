@@ -6,6 +6,24 @@ from collections import defaultdict
 from pathlib import Path
 from osgeo import gdal
 import time
+import rasterio
+import matplotlib.pyplot as plt
+import cv2
+from matplotlib.colors import hex2color, rgb2hex
+
+
+def get_radar_value_lonlat_time(lon, lat, timestamp):
+    # print(f"output/weather/radar_{timestamp}.tif")
+    with rasterio.open(f"output/weather/radar_{timestamp}.tif") as src:
+        meta = src.meta
+
+        # Use the transform in the metadata and your coordinates
+        rowcol = rasterio.transform.rowcol(meta["transform"], xs=lon, ys=lat)
+
+        image = src.read()
+        value = image[:, *rowcol]
+
+        return rgb2hex(value.astype(np.float32) / 255, keep_alpha=True)
 
 
 def filter_lat_lon(df):
@@ -80,8 +98,8 @@ def collect_data(path="output", iterations=1, time_interval=1):
         time_interval (int, optional): time to wait between iteration in seconds. Defaults to 1.
     """
 
-    df_stops = pd.read_csv("stops.txt")
-    df_routes = pd.read_csv("routes.txt")
+    df_stops = pd.read_csv("data/stops.txt")
+    df_routes = pd.read_csv("data/routes.txt")
 
     path = Path(path)
 
@@ -132,6 +150,9 @@ import json
 
 
 def collect_translink(path, df_routes, df_stops, iteration, timestamp_radar=0):
+    path = Path(path)
+    path.mkdir(parents=True, exist_ok=True)
+
     df = get_rt_vehicle_df()
 
     df_combine = df.merge(df_routes, on="route_id")
@@ -156,23 +177,21 @@ def save_observation(type_, url_data, path, name):
     # url_complete = f"{url_data}{type_['path']}/{512}/{6}/{LAT}/{LON}/{4 if i == 0 else 0}/0_0.png"
     url_complete = f"{url_data}{type_['path']}/{512}/{7}/{118}/{74}/{4 if name == 'radar' else 0}/0_0.png"
 
-
     # color mapping at https://www.rainviewer.com/api/color-schemes.html
-    urllib.request.urlretrieve(
-        url_complete, path / f"{name}_{type_['time']}.jpg"
-    )
+    urllib.request.urlretrieve(url_complete, path / f"{name}_{type_['time']}.jpg")
 
     ds = gdal.Open(path / f"{name}_{type_['time']}.jpg")
 
     coords_observation_grid = [lon_ul, lat_ul, lon_lr, lat_lr]
 
     ds = gdal.Translate(
-            path / f"{name}_{type_['time']}.tif",
-            ds,
-            format="GTiff",
-            outputSRS="EPSG:4326",
-            outputBounds=coords_observation_grid,
-        )
+        path / f"{name}_{type_['time']}.tif",
+        ds,
+        format="GTiff",
+        outputSRS="EPSG:4326",
+        outputBounds=coords_observation_grid,
+    )
+
 
 def collect_weather(path):
     path = Path(path)
@@ -185,10 +204,12 @@ def collect_weather(path):
     # storing the JSON response
     # from url in data
     data_json = json.loads(response.read())
-    
+
     url_data = "https://tilecache.rainviewer.com/"
     names = ["radar", "satellite"]
-    for i, types_ in enumerate([data_json["radar"]["nowcast"], data_json["satellite"]["infrared"]]):
+    for i, types_ in enumerate(
+        [data_json["radar"]["nowcast"], data_json["satellite"]["infrared"]]
+    ):
         for type_ in types_:
             save_observation(type_, url_data, path, names[i])
 
@@ -207,5 +228,24 @@ def csv_to_df(path):
         return pd.DataFrame(res, index=[0])
 
     df["upcoming_stops"] = df["upcoming_stops"].apply(func)
+
+    rain_color_mapping = pd.read_csv("data/color_rain_mapping.csv")
+
+
+    def func_rain_mapping(lon, lat, timestamp):
+        color_at_lon_lat = get_radar_value_lonlat_time(lon, lat, timestamp)
+        x = (
+            rain_color_mapping[rain_color_mapping["TWC"] == color_at_lon_lat]["dBZ"]
+            .iloc[0]
+            .item()
+        )
+
+        return x
+
+    col = df.apply(
+        lambda x: func_rain_mapping(x["lon"], x["lat"], x["timestamp_radar"]), axis=1
+    )
+
+    df.insert(0, "rain_dbz", col)
 
     return df
