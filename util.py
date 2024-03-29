@@ -14,7 +14,7 @@ def filter_lat_lon(df):
     return df
 
 
-def get_route_updates(num_stops_ahead=1):
+def get_route_updates():
     feed = gtfs_realtime_pb2.FeedMessage()
     response = requests.get(
         "https://gtfsrt.api.translink.com.au/api/realtime/SEQ/TripUpdates"
@@ -27,9 +27,9 @@ def get_route_updates(num_stops_ahead=1):
         l = []
 
         for i, upcoming_stop in enumerate(entity.trip_update.stop_time_update):
-            if i == num_stops_ahead:
+            if i == 1:
                 break
-            l += [
+            l = [
                 {
                     "stop_sequence": upcoming_stop.stop_sequence,
                     "stop_id": upcoming_stop.stop_id,
@@ -40,7 +40,7 @@ def get_route_updates(num_stops_ahead=1):
 
         features["trip_id"] += [entity.trip_update.trip.trip_id]
         features["route_id"] += [entity.trip_update.trip.route_id]
-        features["upcoming_stops"] += [pd.DataFrame(l)]
+        features["upcoming_stops"] += l
 
     df = pd.DataFrame(data=features)
     return df
@@ -89,14 +89,15 @@ def collect_data(path="output", iterations=1, time_interval=1):
 
     for iteration in range(iterations):
         # collect weather
-        # only poll every 2.5 minutes (weather updates every 10 minutes regarless)
-        if iteration % (time_interval * 60 * 2.5) == 0:
-            collect_weather(path / "weather")
-        
-        
+        # weather updates every 10 minutes
+        if iteration % (time_interval * 60 * 10) == 0:
+            timestamp_radar = collect_weather(path / "weather")
+
         # collect live location translink vehicles
         t = time.perf_counter_ns()
-        collect_translink(path / "translink", df_routes, df_stops, iteration)
+        collect_translink(
+            path / "translink", df_routes, df_stops, iteration, timestamp_radar
+        )
         print(f"time took = {(time.perf_counter_ns() - t)/ 10e9}")
 
         # sleep until next poll
@@ -107,31 +108,30 @@ def aggregate_csvs(path: Path = "output/"):
     df = None
     path = Path(path)
 
-
     i = 0
 
     def read_messurement_df(path):
-        df = pd.read_csv(path / "translink")
-        
+        df = pd.csv_to_df(path / "translink")
+
         nonlocal i
 
         df.insert(0, "num_measurement", i)
-    
+
         i += 1
         return df
 
     p = map(lambda x: read_messurement_df(x), path.iterdir())
-    
+
     df = pd.concat(p)
 
     print(df)
 
 
-
 import urllib.request
 import json
 
-def collect_translink(path, df_routes, df_stops, iteration):
+
+def collect_translink(path, df_routes, df_stops, iteration, timestamp_radar=0):
     df = get_rt_vehicle_df()
 
     df_combine = df.merge(df_routes, on="route_id")
@@ -143,47 +143,69 @@ def collect_translink(path, df_routes, df_stops, iteration):
 
     df_combine = df_combine.merge(df_route_updates, on="trip_id")
 
+    df_combine.insert(0, "timestamp_radar", timestamp_radar)
+
     df_combine.to_csv(path / f"{iteration}.csv", index=False)
+
+
+def save_observation(type_, url_data, path, name):
+    LAT, LON = -27.470125, 153.021072
+    lon_ul, lat_ul = 151.875003, -27.059128
+    lon_lr, lat_lr = 154.687502, -29.535232
+
+    # url_complete = f"{url_data}{type_['path']}/{512}/{6}/{LAT}/{LON}/{4 if i == 0 else 0}/0_0.png"
+    url_complete = f"{url_data}{type_['path']}/{512}/{7}/{118}/{74}/{4 if name == 'radar' else 0}/0_0.png"
+
+
+    # color mapping at https://www.rainviewer.com/api/color-schemes.html
+    urllib.request.urlretrieve(
+        url_complete, path / f"{name}_{type_['time']}.jpg"
+    )
+
+    ds = gdal.Open(path / f"{name}_{type_['time']}.jpg")
+
+    coords_observation_grid = [lon_ul, lat_ul, lon_lr, lat_lr]
+
+    ds = gdal.Translate(
+            path / f"{name}_{type_['time']}.tif",
+            ds,
+            format="GTiff",
+            outputSRS="EPSG:4326",
+            outputBounds=coords_observation_grid,
+        )
 
 def collect_weather(path):
     path = Path(path)
     path.mkdir(parents=True, exist_ok=True)
 
-    url_json = 'https://api.rainviewer.com/public/weather-maps.json'
-    
-    response = urllib.request.urlopen(url_json) 
+    url_json = "https://api.rainviewer.com/public/weather-maps.json"
 
-    # storing the JSON response  
-    # from url in data 
-    data_json = json.loads(response.read()) 
-    
-    current_radar_meta = data_json["radar"]["nowcast"][0]
-    current_satellite_meta = data_json["satellite"]["infrared"][0]
-    coverage = "v2/coverage/0"
+    response = urllib.request.urlopen(url_json)
+
+    # storing the JSON response
+    # from url in data
+    data_json = json.loads(response.read())
     
     url_data = "https://tilecache.rainviewer.com/"
-    
-    for i, type_ in enumerate([current_radar_meta, current_satellite_meta]):
-        
-        names = ["radar", "satellite"]
-        
-        LAT, LON = -27.470125, 153.021072
-        lon_ul, lat_ul = 151.875003, -27.059128
-        lon_lr, lat_lr = 154.687502, -29.535232
-        
-        # url_complete = f"{url_data}{type_['path']}/{512}/{6}/{LAT}/{LON}/{4 if i == 0 else 0}/0_0.png"
-        url_complete = f"{url_data}{type_['path']}/{512}/{7}/{118}/{74}/{4 if i == 0 else 0}/0_0.png"
+    names = ["radar", "satellite"]
+    for i, types_ in enumerate([data_json["radar"]["nowcast"], data_json["satellite"]["infrared"]]):
+        for type_ in types_:
+            save_observation(type_, url_data, path, names[i])
 
-        print(url_complete)
+            if i == 0:
+                timestamp_radar = type_["time"]
 
-        # color mapping at https://www.rainviewer.com/api/color-schemes.html
-        urllib.request.urlretrieve(url_complete, path / f"{names[i]}_{type_['time']}.png")
-        
-        
-        ds = gdal.Open(path / f"{names[i]}_{type_['time']}.png")
-        
-        coords_observation_grid = [lon_ul, lat_ul, lon_lr, lat_lr]
-        
-        ds = gdal.Translate(path / f"{names[i]}_{type_['time']}.tif", ds, format = 'GTiff', outputSRS = 'EPSG:4326', outputBounds = coords_observation_grid)
-        print(ds)
+    return timestamp_radar
 
+
+def csv_to_df(path):
+    df = pd.read_csv(path)
+
+    def func(x: str):
+        x = x.replace("'", '"')
+        res = json.loads(x)
+        return pd.DataFrame(res, index=[0])
+
+    df["upcoming_stops"] = df["upcoming_stops"].apply(func)
+
+    return df
