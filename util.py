@@ -12,18 +12,15 @@ import cv2
 from matplotlib.colors import hex2color, rgb2hex
 
 
-def get_radar_value_lonlat_time(lon, lat, timestamp):
+def get_radar_value_lonlat_time(lon, lat, meta, image):
     # print(f"output/weather/radar_{timestamp}.tif")
-    with rasterio.open(f"output/weather/radar_{timestamp}.tif") as src:
-        meta = src.meta
 
-        # Use the transform in the metadata and your coordinates
-        rowcol = rasterio.transform.rowcol(meta["transform"], xs=lon, ys=lat)
+    # Use the transform in the metadata and your coordinates
+    rowcol = rasterio.transform.rowcol(meta["transform"], xs=lon, ys=lat)
 
-        image = src.read()
-        value = image[:, *rowcol]
+    value = image[:, *rowcol]
 
-        return rgb2hex(value.astype(np.float32) / 255, keep_alpha=True)
+    return rgb2hex(value.astype(np.float32) / 255, keep_alpha=True)
 
 
 def filter_lat_lon(df):
@@ -56,10 +53,11 @@ def get_route_updates():
                 }
             ]
 
-        features["trip_id"] += [entity.trip_update.trip.trip_id]
-        features["route_id"] += [entity.trip_update.trip.route_id]
-        features["upcoming_stops"] += l
-
+        if len(l) != 0:
+            features["trip_id"] += [entity.trip_update.trip.trip_id]
+            features["route_id"] += [entity.trip_update.trip.route_id]
+            features["upcoming_stops"] += l
+        
     df = pd.DataFrame(data=features)
     return df
 
@@ -108,7 +106,7 @@ def collect_data(path="output", iterations=1, time_interval=1):
     for iteration in range(iterations):
         # collect weather
         # weather updates every 10 minutes
-        if iteration % (time_interval * 60 * 10) == 0:
+        if iteration % (2 * 10) == 0:
             timestamp_radar = collect_weather(path / "weather")
 
         # collect live location translink vehicles
@@ -124,17 +122,15 @@ def collect_data(path="output", iterations=1, time_interval=1):
 
 def aggregate_csvs(path: Path = "output/"):
     df = None
-    path = Path(path)
+    path = Path(path) / "translink"
 
     i = 0
 
     def read_messurement_df(path):
-        df = pd.csv_to_df(path / "translink")
+        df = csv_to_df(path)
 
         nonlocal i
-
         df.insert(0, "num_measurement", i)
-
         i += 1
         return df
 
@@ -142,7 +138,7 @@ def aggregate_csvs(path: Path = "output/"):
 
     df = pd.concat(p)
 
-    print(df)
+    return df
 
 
 import urllib.request
@@ -175,7 +171,7 @@ def save_observation(type_, url_data, path, name):
     lon_lr, lat_lr = 154.687502, -29.535232
 
     # url_complete = f"{url_data}{type_['path']}/{512}/{6}/{LAT}/{LON}/{4 if i == 0 else 0}/0_0.png"
-    url_complete = f"{url_data}{type_['path']}/{512}/{7}/{118}/{74}/{4 if name == 'radar' else 0}/0_0.png"
+    url_complete = f"{url_data}{type_['path']}/{512}/{7}/{118}/{74}/{0 if name == 'radar' else 0}/0_0.png"
 
     # color mapping at https://www.rainviewer.com/api/color-schemes.html
     urllib.request.urlretrieve(url_complete, path / f"{name}_{type_['time']}.jpg")
@@ -231,11 +227,21 @@ def csv_to_df(path):
 
     rain_color_mapping = pd.read_csv("data/color_rain_mapping.csv")
 
+    src = None
+    meta = None
+    image = None
 
     def func_rain_mapping(lon, lat, timestamp):
-        color_at_lon_lat = get_radar_value_lonlat_time(lon, lat, timestamp)
+        nonlocal src, meta, image
+        if src is None:
+            src = rasterio.open(f"output/weather/radar_{timestamp}.tif")
+            meta = src.meta
+            image = src.read()
+
+        color_at_lon_lat = get_radar_value_lonlat_time(lon, lat, meta, image)
+
         x = (
-            rain_color_mapping[rain_color_mapping["TWC"] == color_at_lon_lat]["dBZ"]
+            rain_color_mapping[rain_color_mapping["BnW"] == color_at_lon_lat]["dBZ"]
             .iloc[0]
             .item()
         )
@@ -249,3 +255,34 @@ def csv_to_df(path):
     df.insert(0, "rain_dbz", col)
 
     return df
+
+
+import plotly.express as px
+
+def delay_mapper(x):
+    delays = x["arrival_delay"]
+    delays.name = "delays"
+    return delays
+
+def get_delay_histogram(dataframe,  quantiles = [0, 1]):
+    delays = dataframe["upcoming_stops"].apply(delay_mapper)
+    delays.insert(0, "route_type", dataframe["route_type"])
+
+    q_low = delays[0].quantile(quantiles[0])
+    q_hi = delays[0].quantile(quantiles[1])
+    delays = delays[(delays[0] <= q_hi) & (delays[0] >= q_low)]
+    
+    return px.histogram(delays, title="frame delay histogram", x=0, color="route_type", histnorm='probability density')
+
+
+def get_rain_delay_plot(dataframe, quantiles = [0, 1]):
+    delays = dataframe["upcoming_stops"].apply(delay_mapper)
+    delays.insert(0, "rain_dbz", dataframe["rain_dbz"])
+    delays.insert(0, "route_type", dataframe["route_type"])
+
+    q_low = delays[0].quantile(quantiles[0])
+    q_hi = delays[0].quantile(quantiles[1])
+    delays = delays[(delays[0] <= q_hi) & (delays[0] >= q_low)]
+    
+    return px.scatter(delays, title="rain vs. delay", y=0, x="rain_dbz")#, color="route_type")
+
