@@ -6,3 +6,4 @@ opencv-python
 matplotlib
 gtfs-realtime-bindings
 rasterio
+dash_bootstrap_components
