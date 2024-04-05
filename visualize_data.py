@@ -66,6 +66,7 @@ df_routes = pd.read_csv("data/routes.txt")
 
 fig4, fig5 = None, None
 
+# CAUTION might take a long time if a lot of data is collected in ./output
 df_aggregate = aggregate_csvs()
 quantiles = [0.05, 0.95]
 fig4 = get_delay_histogram(df_aggregate, quantiles)

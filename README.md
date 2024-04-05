@@ -4,6 +4,9 @@
 
 Use conda to install dependencies in requirements.txt
 
+For gdal:
+- `conda install -c conda-forge gdal`
+
 This is important as we need prebuild binaries for gdal for georeferencing our radar/satellite data
 
 
