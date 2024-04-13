@@ -144,7 +144,7 @@ def aggregate_csvs(path: Path = "output/"):
 import urllib.request
 import json
 
-
+'''
 def collect_translink(path, df_routes, df_stops, iteration, timestamp_radar=0):
     path = Path(path)
     path.mkdir(parents=True, exist_ok=True)
@@ -163,7 +163,32 @@ def collect_translink(path, df_routes, df_stops, iteration, timestamp_radar=0):
     df_combine.insert(0, "timestamp_radar", timestamp_radar)
 
     df_combine.to_csv(path / f"{iteration}.csv", index=False)
+'''
 
+def collect_translink(path, df_routes, df_stops, iteration, timestamp_radar=0):
+    path = Path(path)
+    path.mkdir(parents=True, exist_ok=True)
+
+    df = get_rt_vehicle_df()
+
+    df_combine = df.merge(df_routes, on="route_id")
+    df_combine = df_combine.merge(df_stops, on="stop_id")
+
+    df_combine = filter_lat_lon(df_combine)
+
+    df_route_updates = get_route_updates()
+
+    df_combine = df_combine.merge(df_route_updates, on="trip_id")
+
+    df_combine.insert(0, "timestamp_radar", timestamp_radar)
+
+    # Get the current timestamp
+    timestamp = time.time()
+
+    # Save the data with the timestamp as the filename
+    timestamp_str = str(int(timestamp))
+    filename = f"{timestamp_str}.csv"
+    df_combine.to_csv(path / filename, index=False)
 
 def save_observation(type_, url_data, path, name):
     LAT, LON = -27.470125, 153.021072
