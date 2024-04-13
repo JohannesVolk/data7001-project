@@ -2,9 +2,7 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-from jupyter_dash import JupyterDash
-import dash_core_components as dcc
-import dash_html_components as html
+from dash import Dash,dcc,html
 import plotly.express as px
 import csv
 import dash_bootstrap_components as dbc
@@ -18,13 +16,13 @@ from util import *
 
 LIVE = False
 
-# code and plot setup
+# code and plot setups
 # settings
 # pd.options.plotting.backend = "plotly"
 
 paths_translink = list(Path("output/translink").iterdir())
 
-app = JupyterDash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
+app = Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 app.layout = html.Div(
     [
         html.H1("Live Translink"),
@@ -67,10 +65,10 @@ df_routes = pd.read_csv("data/routes.txt")
 fig4, fig5 = None, None
 
 # CAUTION might take a long time if a lot of data is collected in ./output
-df_aggregate = aggregate_csvs()
+# df_aggregate = aggregate_csvs()
 quantiles = [0.05, 0.95]
-fig4 = get_delay_histogram(df_aggregate, quantiles)
-fig5 = get_rain_delay_plot(df_aggregate, quantiles)
+# fig4 = get_delay_histogram(df_aggregate, quantiles)
+# fig5 = get_rain_delay_plot(df_aggregate, quantiles)
 
 
 # Define callback to update graph
@@ -174,6 +172,8 @@ def streamFig(value, input, slider):
     image = cv2.imread(
         f"output/weather/radar_{df_combine['timestamp_radar'].iloc[0].item()}.jpg"
     )[:, :, ::-1]
+    
+    image = convert_radar_colormap(image)
 
     image_base = cv2.imread("data/base_observationwindow.png")[:, :, ::-1]
     image_base = cv2.resize(image_base, (512, 512), interpolation=cv2.INTER_LINEAR)
@@ -197,7 +197,7 @@ def streamFig(value, input, slider):
 
 
 app.run_server(
-    mode="external",
+    # mode="external",
     port=8069,
     dev_tools_ui=True,  # debug=True,
     dev_tools_hot_reload=True,

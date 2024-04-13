@@ -1,3 +1,6 @@
+# IDEA for the DATA7001 project - Group 10
+
+
 dependencies to download via pip to run demo (video attached otherwise):
 - plotly
 - pandas
@@ -23,7 +26,7 @@ Compare delays on days where rugby/AFL matches are hosted and additional buses c
 Could further include stats about correlation between weather, temperature and delays.
 
 
-PROS:
+# PROS:
 
 Cool visualizability e.g. for a live demo:
 - live status accross the whole city in which we can plot current annomalies (delays, delays above the normal by area)
@@ -31,7 +34,7 @@ Cool visualizability e.g. for a live demo:
 Actual nice project for a Github repo
 
 
-CONS:
+# CONS:
 
 - Might be challenging as dataset has to be compiled through us
 - Data collection would take 2 weeks (or longer, if we want more data)

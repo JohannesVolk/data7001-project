@@ -286,3 +286,25 @@ def get_rain_delay_plot(dataframe, quantiles = [0, 1]):
     
     return px.scatter(delays, title="rain vs. delay", y=0, x="rain_dbz")#, color="route_type")
 
+
+
+def convert_radar_colormap(input_img, ouput_map = "TWC"):
+    rain_color_mapping = pd.read_csv("data/color_rain_mapping.csv")
+    
+    color_index = input_img[:, :, 0]
+    target_color_vals = rain_color_mapping[ouput_map]
+    
+    def func(x):
+        return hex2color(x)
+    
+    target_color_vals = target_color_vals.apply(func)
+    # print(target_color_vals)
+    # print(color_index)
+
+    def mapping_func(x):
+        return target_color_vals.iloc[x]
+    
+    l = np.vectorize(mapping_func)(input_img)
+    input_img = np.stack([l[0][:,:,0],l[1][:,:,0],l[2][:,:,0]],axis=2) * 255
+    
+    return input_img.astype(np.uint8)

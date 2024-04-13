@@ -1,5 +1,11 @@
 # data7001-project
 
+In this research project we analyze how public transport in South-East Queensland is affected by rain.
+We provide a toolkit for historical and live statistical analysis of the current delays in the Translink Bus, Train, Tram and Boat network. For this we leverage the GTSB-RT and RainViewer API.
+
+
+
+
 ## Installation
 
 Use conda to install dependencies in requirements.txt
