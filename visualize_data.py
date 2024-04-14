@@ -2,14 +2,13 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-from dash import Dash,dcc,html
+from dash import Dash, dcc, html
 import plotly.express as px
 import csv
 import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output
 import matplotlib.pyplot as plt
 import cv2
-
 
 from util import *
 
@@ -53,7 +52,9 @@ app.layout = html.Div(
                 ),
             ]
         ),
-        dbc.Row([dbc.Col(dcc.Graph(id="graph3")), dbc.Col(dcc.Graph(id="graph4")), dbc.Col(dcc.Graph(id="graph5"))]),
+        dbc.Row([dbc.Col(dcc.Graph(id="graph5"))]),
+        dbc.Row([dbc.Col(dcc.Graph(id="graph3")), dbc.Col(dcc.Graph(id="graph4"))]),
+        dbc.Row([dbc.Col(dcc.Graph(id="graph6")), dbc.Col(dcc.Graph(id="graph7"))]),
     ]
 )
 
@@ -61,13 +62,15 @@ df_stops = pd.read_csv("data/stops.txt")
 df_routes = pd.read_csv("data/routes.txt")
 
 
-
-fig4, fig5 = None, None
+fig5, fig6, fig7 = None, None, None
 
 # CAUTION might take a long time if a lot of data is collected in ./output
-# df_aggregate = aggregate_csvs()
+df_aggregate = aggregate_csvs()
 quantiles = [0.05, 0.95]
-# fig4 = get_delay_histogram(df_aggregate, quantiles)
+
+df_aggregate = add_suburbs(df_aggregate)
+fig5 = get_choropleth(df_aggregate)
+# fig6 = get_delay_histogram(df_aggregate, quantiles)
 # fig5 = get_rain_delay_plot(df_aggregate, quantiles)
 
 
@@ -79,6 +82,8 @@ quantiles = [0.05, 0.95]
         Output("graph3", "figure"),
         Output("graph4", "figure"),
         Output("graph5", "figure"),
+        Output("graph6", "figure"),
+        Output("graph7", "figure"),
     ],
     [
         Input("interval-component", "n_intervals"),
@@ -95,6 +100,7 @@ def streamFig(value, input, slider):
     else:
         df_combine = csv_to_df(paths_translink[slider])
 
+    df_combine = add_suburbs(df_combine)
     df_combine["rain_dbz"] = df_combine["rain_dbz"].astype(str)
     fig = go.Figure()
 
@@ -119,7 +125,9 @@ def streamFig(value, input, slider):
             + df_selection["route_long_name"]
             + " to: "
             + df_selection["stop_name"]
-            + " rain: "
+            + " | in: "
+            + df_selection["LOC_NAME"]
+            + " | rain: "
             + df_selection["rain_dbz"],
         )
 
@@ -146,20 +154,28 @@ def streamFig(value, input, slider):
         )
 
     else:
-        route_type_mapper_dict = {"Tram":"yellow", "":"cyan", "Train":"green", "Bus":"tomato", "Boat":"aqua"}
-        
+        route_type_mapper_dict = {
+            "Tram": "yellow",
+            "": "cyan",
+            "Train": "green",
+            "Bus": "tomato",
+            "Boat": "aqua",
+        }
+
         for route_type_name, df_by_route_type in df_combine.groupby("route_type"):
             fig.add_scattermapbox(
                 lat=df_by_route_type["lat"],
                 lon=df_by_route_type["lon"],
-                name = route_type_name,
+                name=route_type_name,
                 fillcolor=route_type_mapper_dict[route_type_name],
                 text=df_by_route_type["route_short_name"]
                 + " | "
                 + df_by_route_type["route_long_name"]
                 + " to: "
                 + df_by_route_type["stop_name"]
-                + " rain: "
+                + " | suburb: "
+                + df_by_route_type["LOC_NAME"]
+                + "| rain: "
                 + df_by_route_type["rain_dbz"],
             )
         fig.update_mapboxes(
@@ -172,7 +188,7 @@ def streamFig(value, input, slider):
     image = cv2.imread(
         f"output/weather/radar_{df_combine['timestamp_radar'].iloc[0].item()}.jpg"
     )[:, :, ::-1]
-    
+
     image = convert_radar_colormap(image)
 
     image_base = cv2.imread("data/base_observationwindow.png")[:, :, ::-1]
@@ -181,9 +197,12 @@ def streamFig(value, input, slider):
     fig2 = px.imshow(image[:300, 50:350, :], title="rain radar")
 
     # delay plots -----------------------------------------
-    
-    fig3 = get_delay_histogram(df_combine)
-    # fig5 = get_rain_delay_plot(df_combine)
+
+    fig3 = get_delay_histogram(df_combine, quantiles)
+    fig4 = get_delay_boxplot(df_combine)
+    # fig5 = get_choropleth(df_combine)
+
+    # fig6 = get_rain_delay_plot(df_combine)
 
     # ----------------------------------------
 
@@ -193,7 +212,7 @@ def streamFig(value, input, slider):
 
     fig.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0})
 
-    return fig, fig2, fig3, fig4, fig5
+    return fig, fig2, fig3, fig4, fig5, fig6, fig7
 
 
 app.run_server(

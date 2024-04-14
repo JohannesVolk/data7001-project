@@ -10,6 +10,9 @@ import rasterio
 import matplotlib.pyplot as plt
 import cv2
 from matplotlib.colors import hex2color, rgb2hex
+import geopandas as gpd
+import pyproj
+import shapely
 
 
 def get_radar_value_lonlat_time(lon, lat, meta, image):
@@ -57,7 +60,7 @@ def get_route_updates():
             features["trip_id"] += [entity.trip_update.trip.trip_id]
             features["route_id"] += [entity.trip_update.trip.route_id]
             features["upcoming_stops"] += l
-        
+
     df = pd.DataFrame(data=features)
     return df
 
@@ -119,6 +122,7 @@ def collect_data(path="output", iterations=1, time_interval=1):
         # sleep until next poll
         time.sleep(time_interval)
 
+from tqdm import tqdm
 
 def aggregate_csvs(path: Path = "output/"):
     df = None
@@ -134,7 +138,7 @@ def aggregate_csvs(path: Path = "output/"):
         i += 1
         return df
 
-    p = map(lambda x: read_messurement_df(x), path.iterdir())
+    p = map(lambda x: read_messurement_df(x), tqdm(path.iterdir(), desc= "aggregate csv: ", total=(len(list(path.iterdir())))))
 
     df = pd.concat(p)
 
@@ -144,7 +148,7 @@ def aggregate_csvs(path: Path = "output/"):
 import urllib.request
 import json
 
-'''
+"""
 def collect_translink(path, df_routes, df_stops, iteration, timestamp_radar=0):
     path = Path(path)
     path.mkdir(parents=True, exist_ok=True)
@@ -163,7 +167,8 @@ def collect_translink(path, df_routes, df_stops, iteration, timestamp_radar=0):
     df_combine.insert(0, "timestamp_radar", timestamp_radar)
 
     df_combine.to_csv(path / f"{iteration}.csv", index=False)
-'''
+"""
+
 
 def collect_translink(path, df_routes, df_stops, iteration, timestamp_radar=0):
     path = Path(path)
@@ -189,6 +194,7 @@ def collect_translink(path, df_routes, df_stops, iteration, timestamp_radar=0):
     timestamp_str = str(int(timestamp))
     filename = f"{timestamp_str}.csv"
     df_combine.to_csv(path / filename, index=False)
+
 
 def save_observation(type_, url_data, path, name):
     LAT, LON = -27.470125, 153.021072
@@ -240,6 +246,18 @@ def collect_weather(path):
     return timestamp_radar
 
 
+def add_suburbs(df):
+    shapefile = gpd.read_file("data/gda2020/GDA2020/qld_localities.shp")
+    shapefile.to_crs(pyproj.CRS.from_epsg(4326), inplace=True)
+
+    df_coords = gpd.GeoDataFrame(
+        df, geometry=gpd.points_from_xy(df.lon, df.lat), crs="EPSG:4326"
+    )
+    df_with_suburbs = gpd.sjoin(shapefile, df_coords, how="inner", predicate="contains")
+
+    return df_with_suburbs
+
+
 def csv_to_df(path):
     df = pd.read_csv(path)
 
@@ -284,23 +302,92 @@ def csv_to_df(path):
 
 import plotly.express as px
 
+
 def delay_mapper(x):
     delays = x["arrival_delay"]
     delays.name = "delays"
     return delays
 
-def get_delay_histogram(dataframe,  quantiles = [0, 1]):
+
+def get_delay_histogram(dataframe, quantiles=[0, 1]):
     delays = dataframe["upcoming_stops"].apply(delay_mapper)
     delays.insert(0, "route_type", dataframe["route_type"])
 
     q_low = delays[0].quantile(quantiles[0])
     q_hi = delays[0].quantile(quantiles[1])
     delays = delays[(delays[0] <= q_hi) & (delays[0] >= q_low)]
+
+    return px.histogram(
+        delays,
+        title="frame delay histogram",
+        x=0,
+        color="route_type",
+        histnorm="probability density",
+    )
+
+
+def get_delay_boxplot(df):
+    delays = df["upcoming_stops"].apply(delay_mapper)
+    delays.insert(0, "route_type", df["route_type"])
+
+    return px.box(delays, title="frame delay boxplot", x=0, color="route_type")
+
+
+def geometry_mapper(geometry):
+    # print(shapely.to_geojson(geometry))
+    # exit()
+    json_repr = json.dumps(shapely.geometry.mapping(geometry))
+
+    features = {
+        "type": "Feature",
+        "properties": {},
+        "geometry": shapely.geometry.mapping(geometry),
+        "id": "Albion",
+    }.__str__()
+    geojson_ = shapely.to_geojson(geometry)
+
+    features = str.replace(features, "(", "[")
+    features = str.replace(features, "]", ")")
+
+    # exit()
+    return features
+
+
+import plotly.graph_objects as go
+
+
+def get_choropleth(df):
     
-    return px.histogram(delays, title="frame delay histogram", x=0, color="route_type", histnorm='probability density')
+    print("generating choropleth")
+    df["upcoming_stops"] = df["upcoming_stops"].apply(delay_mapper)
+    delay_by_suburb = (
+        df.groupby(["LOC_NAME", "geometry"], group_keys=False)["upcoming_stops"]
+        .mean()
+        .reset_index()
+    )
+
+    # fig = go.Figure()
+    # gpd.GeoDataFrame(delay_by_suburb).plot(column="upcoming_stops", ax=fig)
+
+    with open("data/gda2020/GDA2020/qld_localities.json") as geofile:
+        j_file = json.load(geofile)
+    fig = px.choropleth_mapbox(
+        delay_by_suburb,
+        title="delay choropleth",
+        geojson=j_file,
+        locations="LOC_NAME",
+        featureidkey="properties.LOC_NAME",
+        color="upcoming_stops",
+        mapbox_style="carto-positron",
+        zoom=6,
+        center={"lat": df["lat"].mean(), "lon": df["lon"].mean()},
+    )
+    print("finished generating choropleth")
+
+    return fig
 
 
-def get_rain_delay_plot(dataframe, quantiles = [0, 1]):
+def get_rain_delay_plot(dataframe, quantiles=[0, 1]):
     delays = dataframe["upcoming_stops"].apply(delay_mapper)
     delays.insert(0, "rain_dbz", dataframe["rain_dbz"])
     delays.insert(0, "route_type", dataframe["route_type"])
@@ -308,28 +395,29 @@ def get_rain_delay_plot(dataframe, quantiles = [0, 1]):
     q_low = delays[0].quantile(quantiles[0])
     q_hi = delays[0].quantile(quantiles[1])
     delays = delays[(delays[0] <= q_hi) & (delays[0] >= q_low)]
-    
-    return px.scatter(delays, title="rain vs. delay", y=0, x="rain_dbz")#, color="route_type")
+
+    return px.scatter(
+        delays, title="rain vs. delay", y=0, x="rain_dbz"
+    )  # , color="route_type")
 
 
-
-def convert_radar_colormap(input_img, ouput_map = "TWC"):
+def convert_radar_colormap(input_img, ouput_map="TWC"):
     rain_color_mapping = pd.read_csv("data/color_rain_mapping.csv")
-    
+
     color_index = input_img[:, :, 0]
     target_color_vals = rain_color_mapping[ouput_map]
-    
+
     def func(x):
         return hex2color(x)
-    
+
     target_color_vals = target_color_vals.apply(func)
     # print(target_color_vals)
     # print(color_index)
 
     def mapping_func(x):
         return target_color_vals.iloc[x]
-    
+
     l = np.vectorize(mapping_func)(input_img)
-    input_img = np.stack([l[0][:,:,0],l[1][:,:,0],l[2][:,:,0]],axis=2) * 255
-    
+    input_img = np.stack([l[0][:, :, 0], l[1][:, :, 0], l[2][:, :, 0]], axis=2) * 255
+
     return input_img.astype(np.uint8)

@@ -6,8 +6,9 @@ import shutil
 from PIL import Image
 from util import *
 
+
 def make_video(image_list: list, fps: int, delete_folder=True, play_video=False):
-    """The main def for creating a temporary video out of the 
+    """The main def for creating a temporary video out of the
     PIL Image list passed, according to the FPS passed
     Parameters
     ----------
@@ -38,7 +39,7 @@ def make_video(image_list: list, fps: int, delete_folder=True, play_video=False)
         os.system("vlc {}/test.mp4 vlc://quit".format(dirpath))
     else:
         print("Find your images and video at {}".format(dirpath))
-        
+
     return dirpath
 
 
@@ -51,6 +52,13 @@ def image_mapper(path):
     return image
 
 
-s = make_video([image_mapper(path) for path in Path("output/weather").iterdir() if "jpg" in str(path) and "radar" in str(path)], fps = 5)
+s = make_video(
+    [
+        image_mapper(path)
+        for path in Path("output/weather").iterdir()
+        if "jpg" in str(path) and "radar" in str(path)
+    ],
+    fps=5,
+)
 
 shutil.move(s + "/test.mp4", "demo/weather.mp4")
