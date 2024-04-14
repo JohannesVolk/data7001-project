@@ -11,14 +11,15 @@ Find out why almost half of the transport options seem to be lost in data collec
 # IMPLEMENTATION TASKS
 - remove suburbs not in observation window (aka. cont contained in the observed square of the rain radar)
 - Make CSV aggregation/our full dataset streamable/batched (dataset will be to big to fully load into memory)
+-> might also include feature selection where appropriate and removing uneccessary columns when they are not needed
 
 # ANALYSIS
-include more geospatial data
+include more geospatial data (can be solved the same way like the suburb data using .shp files and geojson)
 - population distribution
 - residential vs. commercial areas
 
 further analysis:
-- choropleth by routes
+- choropleth by routes or transportation type(i.e train, boat, bus or tram)
 - analysis at which time of day delays happen
 
 

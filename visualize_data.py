@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import cv2
 
 from util import *
+from plots import *
 
 
 LIVE = False
@@ -65,11 +66,11 @@ df_routes = pd.read_csv("data/routes.txt")
 fig5, fig6, fig7 = None, None, None
 
 # CAUTION might take a long time if a lot of data is collected in ./output
-df_aggregate = aggregate_csvs()
+# df_aggregate = aggregate_csvs()
 quantiles = [0.05, 0.95]
 
-df_aggregate = add_suburbs(df_aggregate)
-fig5 = get_choropleth(df_aggregate)
+# df_aggregate = add_suburbs(df_aggregate)
+# fig5 = get_choropleth(df_aggregate)
 # fig6 = get_delay_histogram(df_aggregate, quantiles)
 # fig5 = get_rain_delay_plot(df_aggregate, quantiles)
 
@@ -200,7 +201,7 @@ def streamFig(value, input, slider):
 
     fig3 = get_delay_histogram(df_combine, quantiles)
     fig4 = get_delay_boxplot(df_combine)
-    # fig5 = get_choropleth(df_combine)
+    fig5 = get_choropleth(df_combine)
 
     # fig6 = get_rain_delay_plot(df_combine)
 
@@ -212,6 +213,7 @@ def streamFig(value, input, slider):
 
     fig.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0})
 
+    print("figures updated - start creating dash website")
     return fig, fig2, fig3, fig4, fig5, fig6, fig7
 
 
