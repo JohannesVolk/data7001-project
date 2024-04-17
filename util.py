@@ -10,13 +10,9 @@ import rasterio
 import matplotlib.pyplot as plt
 import cv2
 from matplotlib.colors import hex2color, rgb2hex
-import geopandas as gpd
-import pyproj
-import shapely
 
 
 def get_radar_value_lonlat_time(lon, lat, meta, image):
-    """get the radar pixel value from the radar image that is closest to the coordinates specified"""
     # print(f"output/weather/radar_{timestamp}.tif")
 
     # Use the transform in the metadata and your coordinates
@@ -28,15 +24,12 @@ def get_radar_value_lonlat_time(lon, lat, meta, image):
 
 
 def filter_lat_lon(df):
-    """filter dataframe for samples that have default coodinates (i.e. invalid due to recent spawn or error in api)"""
     df = df.loc[df["lat"] != 0]
     df = df.loc[df["lon"] != 0]
     return df
 
 
 def get_route_updates():
-    """obtain one dataframe containing all live route updates contatining the delay for vehicles and their upcoming stops"""
-    
     feed = gtfs_realtime_pb2.FeedMessage()
     response = requests.get(
         "https://gtfsrt.api.translink.com.au/api/realtime/SEQ/TripUpdates"
@@ -49,7 +42,6 @@ def get_route_updates():
         l = []
 
         for i, upcoming_stop in enumerate(entity.trip_update.stop_time_update):
-            # increase this to also collect the delay for more than the next upcoming stop
             if i == 1:
                 break
             l = [
@@ -65,14 +57,12 @@ def get_route_updates():
             features["trip_id"] += [entity.trip_update.trip.trip_id]
             features["route_id"] += [entity.trip_update.trip.route_id]
             features["upcoming_stops"] += l
-
+        
     df = pd.DataFrame(data=features)
     return df
 
 
 def get_rt_vehicle_df():
-    """obtain one dataframe containing the live vehicle information
-    """
     feed = gtfs_realtime_pb2.FeedMessage()
     response = requests.get(
         "https://gtfsrt.api.translink.com.au/api/realtime/SEQ/VehiclePositions"
@@ -98,7 +88,12 @@ def get_rt_vehicle_df():
 
 
 def collect_data(path="output", iterations=1, time_interval=1):
-    """runs the data collection process
+    """_summary_
+
+    Args:
+        path (str, optional): output path. Defaults to "output".
+        iterations (int, optional): num of iterations to perform. Defaults to 1.
+        time_interval (int, optional): time to wait between iteration in seconds. Defaults to 1.
     """
 
     df_stops = pd.read_csv("data/stops.txt")
@@ -124,11 +119,8 @@ def collect_data(path="output", iterations=1, time_interval=1):
         # sleep until next poll
         time.sleep(time_interval)
 
-from tqdm import tqdm
 
 def aggregate_csvs(path: Path = "output/"):
-    """aggregates all csv in folder at path into one big csv
-    """
     df = None
     path = Path(path) / "translink"
 
@@ -142,7 +134,7 @@ def aggregate_csvs(path: Path = "output/"):
         i += 1
         return df
 
-    p = map(lambda x: read_messurement_df(x), tqdm(path.iterdir(), desc= "aggregate csv: ", total=(len(list(path.iterdir())))))
+    p = map(lambda x: read_messurement_df(x), path.iterdir())
 
     df = pd.concat(p)
 
@@ -152,7 +144,7 @@ def aggregate_csvs(path: Path = "output/"):
 import urllib.request
 import json
 
-"""
+'''
 def collect_translink(path, df_routes, df_stops, iteration, timestamp_radar=0):
     path = Path(path)
     path.mkdir(parents=True, exist_ok=True)
@@ -171,11 +163,9 @@ def collect_translink(path, df_routes, df_stops, iteration, timestamp_radar=0):
     df_combine.insert(0, "timestamp_radar", timestamp_radar)
 
     df_combine.to_csv(path / f"{iteration}.csv", index=False)
-"""
-
+'''
 
 def collect_translink(path, df_routes, df_stops, iteration, timestamp_radar=0):
-    """poll the translink data from api and store in csv"""
     path = Path(path)
     path.mkdir(parents=True, exist_ok=True)
 
@@ -200,10 +190,7 @@ def collect_translink(path, df_routes, df_stops, iteration, timestamp_radar=0):
     filename = f"{timestamp_str}.csv"
     df_combine.to_csv(path / filename, index=False)
 
-
 def save_observation(type_, url_data, path, name):
-    """poll the rainviewer url and store the frame in the geotiff format after translating it (georeferencing the pixels with our observation window)"""
-
     LAT, LON = -27.470125, 153.021072
     lon_ul, lat_ul = 151.875003, -27.059128
     lon_lr, lat_lr = 154.687502, -29.535232
@@ -213,13 +200,12 @@ def save_observation(type_, url_data, path, name):
 
     # color mapping at https://www.rainviewer.com/api/color-schemes.html
     urllib.request.urlretrieve(url_complete, path / f"{name}_{type_['time']}.jpg")
-
-    ds = gdal.Open(path / f"{name}_{type_['time']}.jpg")
-
+    obv_path = path / f"{name}_{type_['time']}.jpg"
+    ds = gdal.Open(str(obv_path))
     coords_observation_grid = [lon_ul, lat_ul, lon_lr, lat_lr]
-
+    tif_path = path / f"{name}_{type_['time']}.tif"
     ds = gdal.Translate(
-        path / f"{name}_{type_['time']}.tif",
+        str(tif_path),
         ds,
         format="GTiff",
         outputSRS="EPSG:4326",
@@ -228,7 +214,6 @@ def save_observation(type_, url_data, path, name):
 
 
 def collect_weather(path):
-    """poll the live rain data from the rainviewer api and store observation"""
     path = Path(path)
     path.mkdir(parents=True, exist_ok=True)
 
@@ -254,21 +239,7 @@ def collect_weather(path):
     return timestamp_radar
 
 
-def add_suburbs(df):
-    """add data for the suburbs to the dataframe"""
-    shapefile = gpd.read_file("data/gda2020/GDA2020/qld_localities.shp")
-    shapefile.to_crs(pyproj.CRS.from_epsg(4326), inplace=True)
-
-    df_coords = gpd.GeoDataFrame(
-        df, geometry=gpd.points_from_xy(df.lon, df.lat), crs="EPSG:4326"
-    )
-    df_with_suburbs = gpd.sjoin(shapefile, df_coords, how="inner", predicate="contains")
-
-    return df_with_suburbs
-
-
 def csv_to_df(path):
-    """read the data from csv to dataframe and preprocess to link the rain data to each vehicle"""
     df = pd.read_csv(path)
 
     def func(x: str):
@@ -310,23 +281,32 @@ def csv_to_df(path):
     return df
 
 
-def convert_radar_colormap(input_img, ouput_map="TWC"):
-    rain_color_mapping = pd.read_csv("data/color_rain_mapping.csv")
+import plotly.express as px
 
-    color_index = input_img[:, :, 0]
-    target_color_vals = rain_color_mapping[ouput_map]
+def delay_mapper(x):
+    delays = x["arrival_delay"]
+    delays.name = "delays"
+    return delays
 
-    def func(x):
-        return hex2color(x)
+def get_delay_histogram(dataframe,  quantiles = [0, 1]):
+    delays = dataframe["upcoming_stops"].apply(delay_mapper)
+    delays.insert(0, "route_type", dataframe["route_type"])
 
-    target_color_vals = target_color_vals.apply(func)
-    # print(target_color_vals)
-    # print(color_index)
+    q_low = delays[0].quantile(quantiles[0])
+    q_hi = delays[0].quantile(quantiles[1])
+    delays = delays[(delays[0] <= q_hi) & (delays[0] >= q_low)]
+    
+    return px.histogram(delays, title="frame delay histogram", x=0, color="route_type", histnorm='probability density')
 
-    def mapping_func(x):
-        return target_color_vals.iloc[x]
 
-    l = np.vectorize(mapping_func)(input_img)
-    input_img = np.stack([l[0][:, :, 0], l[1][:, :, 0], l[2][:, :, 0]], axis=2) * 255
+def get_rain_delay_plot(dataframe, quantiles = [0, 1]):
+    delays = dataframe["upcoming_stops"].apply(delay_mapper)
+    delays.insert(0, "rain_dbz", dataframe["rain_dbz"])
+    delays.insert(0, "route_type", dataframe["route_type"])
 
-    return input_img.astype(np.uint8)
+    q_low = delays[0].quantile(quantiles[0])
+    q_hi = delays[0].quantile(quantiles[1])
+    delays = delays[(delays[0] <= q_hi) & (delays[0] >= q_low)]
+    
+    return px.scatter(delays, title="rain vs. delay", y=0, x="rain_dbz")#, color="route_type")
+
