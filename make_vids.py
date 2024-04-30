@@ -1,5 +1,5 @@
 from pathlib import Path
-import imageio
+import imageio.v2 as imageio
 import tempfile
 import os
 import shutil
@@ -42,23 +42,33 @@ def make_video(image_list: list, fps: int, delete_folder=True, play_video=False)
 
     return dirpath
 
-
+i = 0
 def image_mapper(path):
+    global i 
+    i += 1
     image = convert_radar_colormap(imageio.imread(path))
+    # image = imageio.imread(path)
     image_base = cv2.imread("data/base_observationwindow.png")[:, :, ::-1]
     image_base = cv2.resize(image_base, (512, 512), interpolation=cv2.INTER_LINEAR)
-    image = cv2.addWeighted(image_base, 0.3, image, 0.6, 0)
+    # image = cv2.resize(image, (512, 512), interpolation=cv2.INTER_LINEAR)
+    image = cv2.addWeighted(image_base, 0.1, image[:,:,:], 0.9, 0)
+    print(path)
+    # cv2.imwrite(f"demo/{i}.jpg", image[:, :, ::-1])
     image = Image.fromarray(image)
     return image
 
 
+# _  =[
+#         image_mapper(path)
+#         for path in tqdm([p for p in Path("output/weather").iterdir() if "jpg" in str(p) and "satellite" in str(p)])
+#     ]
+
 s = make_video(
     [
         image_mapper(path)
-        for path in Path("output/weather").iterdir()
-        if "jpg" in str(path) and "radar" in str(path)
-    ],
-    fps=5,
+        for path in tqdm([p for p in Path("output/weather").iterdir() if "jpg" in str(p) and "radar" in str(p)])
+    ][:100],
+    fps=10
 )
 
 shutil.move(s + "/test.mp4", "demo/weather.mp4")

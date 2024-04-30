@@ -14,6 +14,9 @@ Find out why almost half of the transport options seem to be lost in data collec
 -> might also include feature selection where appropriate and removing uneccessary columns when they are not needed
 
 # ANALYSIS
+How to handle outliers?
+- quite significant (maybe some erroneous?)
+
 include more geospatial data (can be solved the same way like the suburb data using .shp files and geojson)
 - population distribution
 - residential vs. commercial areas
@@ -21,8 +24,6 @@ include more geospatial data (can be solved the same way like the suburb data us
 further analysis:
 - choropleth by routes or transportation type(i.e train, boat, bus or tram)
 - analysis at which time of day delays happen
-
-
 
 # IMPROVEMENTS
 more accurate weather data (not highly important)

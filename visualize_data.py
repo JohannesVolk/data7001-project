@@ -208,9 +208,14 @@ def streamFig(value, input, slider):
     # ----------------------------------------
 
     fig.update_layout(
-        mapbox_style="open-street-map",
+        mapbox_style="carto-positron",
     )
-
+    fig.update_layout(legend=dict(
+        yanchor="top",
+        y=0.99,
+        xanchor="left",
+        x=0.01
+    ))
     fig.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0})
 
     print("figures updated - start creating dash website")
