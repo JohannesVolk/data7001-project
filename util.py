@@ -10,7 +10,9 @@ import rasterio
 import matplotlib.pyplot as plt
 import cv2
 from matplotlib.colors import hex2color, rgb2hex
-
+import pandas as pd
+import os
+import glob
 
 def get_radar_value_lonlat_time(lon, lat, meta, image):
     # print(f"output/weather/radar_{timestamp}.tif")
@@ -211,6 +213,35 @@ def save_observation(type_, url_data, path, name):
         outputSRS="EPSG:4326",
         outputBounds=coords_observation_grid,
     )
+
+
+
+import pandas as pd
+from pathlib import Path
+
+def batch_csvs(path: str, batch_size: int = 3):
+    # Convert path to Path object for easier manipulation
+    path = Path(path)
+    
+    # List all CSV files in the specified directory
+    csv_files = sorted(path.glob('*.csv'), key=lambda x: int(x.stem))
+    
+    # Process files in batches
+    for i in range(0, len(csv_files), batch_size):
+        batch_files = csv_files[i:i + batch_size]
+        
+        # Read and concatenate the batch of files
+        df = pd.concat([pd.read_csv(f) for f in batch_files])
+        
+        # Get the UNIX timestamp of the first file in the batch for naming
+        first_file_timestamp = batch_files[0].stem
+        
+        # Save the concatenated DataFrame to a new CSV file
+        output_filename = f"{first_file_timestamp}_batched.csv"
+        output_path = path / output_filename
+        df.to_csv(output_path, index=False)
+        
+        print(f"Batch starting with {first_file_timestamp} saved to {output_filename}")
 
 
 def collect_weather(path):
