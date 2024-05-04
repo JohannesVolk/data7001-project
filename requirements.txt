@@ -9,3 +9,5 @@ rasterio
 geopandas
 dash_bootstrap_components
 tqdm
+contextily
+geoplots

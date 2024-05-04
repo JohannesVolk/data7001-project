@@ -126,7 +126,7 @@ def collect_data(path="output", iterations=1, time_interval=1):
 
 from tqdm import tqdm
 
-def aggregate_csvs(path: Path = "output/"):
+def aggregate_csvs(path: Path = "output/", selection = None):
     """aggregates all csv in folder at path into one big csv
     """
     df = None
@@ -135,19 +135,20 @@ def aggregate_csvs(path: Path = "output/"):
     i = 0
 
     def read_messurement_df(path):
-        df = csv_to_df(path)
+        df = csv_to_df(path, selection)
 
         nonlocal i
         df.insert(0, "num_measurement", i)
         i += 1
         return df
 
-    p = map(lambda x: read_messurement_df(x), tqdm(path.iterdir(), desc= "aggregate csv: ", total=(len(list(path.iterdir())))))
-
-    df = pd.concat(p)
-
-    return df
-
+    if not (path / "../full_dataset.csv").exists():
+        p = map(lambda x: read_messurement_df(x), tqdm(list(path.iterdir())[:4000:5], desc= "aggregate csv: ", total=(len(list(path.iterdir())))))
+        df = pd.concat(p)
+        # df.to_csv(path / "../full_dataset.csv")
+        return df
+    else:
+        return pd.read_csv(path / "../full_dataset.csv")
 
 import urllib.request
 import json
@@ -266,10 +267,14 @@ def add_suburbs(df):
 
     return df_with_suburbs
 
+rain_color_mapping = pd.read_csv("data/color_rain_mapping.csv")
 
-def csv_to_df(path):
+def csv_to_df(path, selection = None):
     """read the data from csv to dataframe and preprocess to link the rain data to each vehicle"""
     df = pd.read_csv(path)
+    if selection is not None:
+        df = df[df["route_short_name"].isin(selection)]
+    
 
     def func(x: str):
         x = x.replace("'", '"')
@@ -277,8 +282,6 @@ def csv_to_df(path):
         return pd.DataFrame(res, index=[0])
 
     df["upcoming_stops"] = df["upcoming_stops"].apply(func)
-
-    rain_color_mapping = pd.read_csv("data/color_rain_mapping.csv")
 
     src = None
     meta = None
@@ -305,7 +308,8 @@ def csv_to_df(path):
         lambda x: func_rain_mapping(x["lon"], x["lat"], x["timestamp_radar"]), axis=1
     )
 
-    df.insert(0, "rain_dbz", col)
+    if len(df) != 0:
+        df.insert(0, "rain_dbz", col)
 
     return df
 
@@ -330,3 +334,8 @@ def convert_radar_colormap(input_img, ouput_map="TWC"):
     input_img = np.stack([l[0][:, :, 0], l[1][:, :, 0], l[2][:, :, 0]], axis=2) * 255
 
     return input_img.astype(np.uint8)
+
+
+
+
+
