@@ -1,9 +1,7 @@
-# data7001-project
+# A Framework for Analysing Delays within Public Transport Networks
 
 In this research project we analyze how public transport in South-East Queensland is affected by rain.
 We provide a toolkit for historical and live statistical analysis of the current delays in the Translink Bus, Train, Tram and Boat network. For this we leverage the GTSB-RT and RainViewer API.
-
-
 
 
 ## Installation
@@ -16,14 +14,22 @@ For gdal:
 This is important as we need prebuild binaries for gdal for georeferencing our radar/satellite data
 
 
-## Solution
+## Report
 
-We poll the live locations and delay status of all translink vehicles every x seconds
+Our final report is located at [`./report.pdf`](./report.pdf)
 
-We poll live radar/satellite data from the rainviewer.com API and georeference them (they are updated every 10 minutes)
-- we obtain PNG and geoTIFF files (latter format allows for access via latitude and longitude)
-- try to upload on of those ".tiff" to "http://app.geotiff.io/" for understanding
+## Data Visualization
 
-We link both datasets:
-- rain is meassured in dbz and retireved for each vehicle through its location in the radar data
-- each dataframe row now contains detailed vehicle information about its route, destination, delay, and rain in its area
+Overview of the complete Translink Train network as reconstructed using our dataset:
+
+![Overview of the complete Translink Train network as reconstructed using our dataset](./demo/Train_overview.png)
+
+
+Exemplary sequence of radar images captured from the Rainviewer API:
+
+[![](./data/radar_still.png)](https://drive.google.com/file/d/1Td_JIwOYbometCRYm7Xg7P44iglX4-hb/preview)
+
+
+Exemplary sequence of satellite images captured from the Rainviewer API:
+
+[![](./data/cloud_still.png)](https://drive.google.com/file/d/1620q2HUcWKkfp-VK2qaOJ5qGnScwrv6i/preview)
